@@ -1,0 +1,31 @@
+{
+
+  "description": "Adds some useful buttons to quickstart HW nxtr game",
+  "manifest_version": 2,
+  "name": "HWQuickStart",
+  "version": "1.0",
+  "homepage_url": "https://github.com/ralf-quick/hwquickstart",
+  "icons": {
+    "48": "icons/hwqs.png"
+  },
+
+  "background": {
+    "scripts": [ "webextension-polyfill.js", "catchwebdata.js" ],
+      "persistent": true
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["*://www.hero-wars.com/*"],
+      "js": [ "webextension-polyfill.js", "jquery-3.6.1.min.js", "md5.js", "generatorics.js", "quickstart.js" ]  
+    }
+  ],
+  
+  "permissions": [
+      "webRequest",
+      "notifications",
+      "webRequestBlocking",
+      "<all_urls>"
+  ]
+
+}
