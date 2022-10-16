@@ -10,6 +10,7 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
 console.log("HWQS page!");
 
 var running_check = setInterval(checkHWRunningTimer, 2000);
+var button_check = setInterval(CheckButtonStatus, 3000);
 
 var quests_done = 0;
 var quests_requested = 0;
@@ -21,21 +22,97 @@ var offerFarmReward_done = false;
 var subscriptionFarm_done = false;
 var zeppelinGiftFarm_done = false;
 
+window.$ = function (selector) {
+	var selectorType = 'querySelectorAll';
+
+	if (selector.indexOf('#') === 0) {
+		selectorType = 'getElementById';
+		selector = selector.substr(1, selector.length);
+	}
+
+	return document[selectorType](selector);
+};
+
+function css(element_list, style, value) {
+	try {
+		if (!element_list) return;
+
+		if (!element_list.length) {
+			element_list.style[style] = value;
+			return;
+		}
+		for (let paragraph of element_list) {
+			paragraph.style[style] = value;
+		}
+	} catch { }
+}
+
+function make_green(p) {
+	css(p, "background-color", "green");
+	css(p, "color", "white");
+}
+
+function clear_green(p) {
+	css(p, "background-color", "");
+	css(p, "color", "");
+}
 function checkHWRunningTimer() {
 
 	browser.runtime.sendMessage("ping");  // response are catched_headers from proxy (see notify)
 
 	if (!buttons_added) {
-		// $(".layout-footer").css("background-color", "darkgreen");
-
 		addFooterSpan("Something", "quick", btnClick);
 		addFooterSpan("GetDailyQuests", "daily", btnClick);
 		addFooterSpan("RaidOutland", "outland", btnClick);
 		addFooterSpan("Tower", "tower", btnClick);
 		addFooterSpan("Expeditions", "expeditions", btnClick);
-		addFooterSpan("hwqsstatus", "...");
+		addFooterSpan("hwqsstatus", "...", function () { setStatus("..."); });
 
 		buttons_added = true;
+	}
+}
+
+var check_button = 0;
+function CheckButtonStatus(checkthis = '') {
+	check_button++;
+	if (check_button > 6) check_button = 1;
+
+	let id = "";
+	let can_go = false;
+	let checked = false;
+	if (check_button == 1 || checkthis == "Something") {
+		id = "Something";
+	}
+	if (check_button == 2 || checkthis == "GetDailyQuests") {
+		id = "GetDailyQuests";
+	}
+	if (check_button == 3 || checkthis == "RaidOutland") {
+		id = "RaidOutland";
+		checked = true;
+		can_go = RaidOutland(true);
+	}
+	if (check_button == 4 || checkthis == "Tower") {
+		id = "Tower";
+		checked = true;
+		can_go = CheckTowerReady();
+	}
+	if (check_button == 4 || checkthis == "Expeditions") {
+		id = "Expeditions";
+		checked = true;
+		can_go = CheckExpeditions();
+	}
+
+	if (id && id.length > 0) {
+		let p = $("#" + id).parentNode;
+		if (checked) {
+			if (can_go)
+				make_green(p);
+			else
+				clear_green(p);
+		} else {
+			if (buttons_added && catched_headers)
+				make_green(p);
+		}
 	}
 }
 
@@ -88,6 +165,7 @@ function btnClick(id) {
 			};
 			done += lc.toString() + " mails"; setStatus(done + " done");
 		});
+		callSync("ascensionChest_open", { "paid": false, "amount": 1 });
 	}
 	
 	if (id == "GetDailyQuests") {
@@ -96,24 +174,25 @@ function btnClick(id) {
 		if (timer_do_quests) 
 			clearInterval(timer_do_quests);
 		else
-			timer_do_quests = setInterval(do_quests, 1000);
+			timer_do_quests = setInterval(do_quests, 500);
 	}
 	
 	if (id == "RaidOutland") {
 		RaidOutland();
-		$("#" + id).parent().remove();
+		CheckButtonStatus(id);
 	}
 	
 	if (id == "Tower") {
 		setTimeout(function () {
 			FullTower();
-			// todo:   $("#" + id).parent().remove();
+			CheckButtonStatus(id);
 		}, 100);
 	}
 	
 	if (id == "Expeditions") {
 		setTimeout(function () {
 			StartNextExpeditions();
+			CheckButtonStatus(id);
 		}, 100);
 	}
 }
@@ -155,6 +234,12 @@ function getRandomInt(min, max) {
 
 function randomChestNr() {
 	return Math.floor(Math.random() * (2 - 0 + 1)) + 0;
+}
+
+function CheckTowerReady() {
+	var info = GetTowerInfo();
+	lastFloorNumber = info.lastFloorNumber;
+	return lastFloorNumber <= 1;
 }
 
 function FullTower() {
@@ -228,8 +313,10 @@ function GetTowerInfo() {
 	}
 }
 
-function GetReadyExpeditions() {
-	setStatus(`searching...`);
+function GetReadyExpeditions(testonly = false) {
+	exp_ready = false;
+	if (!testonly)
+		setStatus(`searching...`);
 	var result = callSync("expeditionGet", {});
 	try {
 		var i = 0;
@@ -237,8 +324,12 @@ function GetReadyExpeditions() {
 			try {
 				if (item.status && item.status == 2) {
 					i++;
-					if (item.endTime && new Date(item.endTime) < new Date())
-						callSync("expeditionFarm", { "expeditionId": item.id });
+					if (item.endTime && new Date(item.endTime) < new Date()) {
+						if (testonly)
+							exp_ready = true;
+                        else
+							callSync("expeditionFarm", { "expeditionId": item.id });
+					}
 				}
 			}
 			catch
@@ -249,8 +340,12 @@ function GetReadyExpeditions() {
 				for (let [kk, ii] of Object.entries(item)) {
 					if (ii.status && ii.status == 2) {
 						i++;
-						if (ii.endTime && new Date(ii.endTime) < new Date())
-							callSync("expeditionFarm", { "expeditionId": ii.id });
+						if (ii.endTime && new Date(ii.endTime) < new Date()) {
+							if (testonly)
+								exp_ready = true;
+							else
+								callSync("expeditionFarm", { "expeditionId": ii.id });
+						}
 					}
 				}
 			}
@@ -258,32 +353,43 @@ function GetReadyExpeditions() {
 			{
 			}
 		}
-		setStatus(`${i} expeditions ready`);
+		if (!testonly)
+			setStatus(`${i} expeditions ready`);
 	}
 	catch
 	{
 	}
+	return exp_ready;
 }
 
-function StartNextExpeditions() {
-	setStatus("searching for new expeditions...");
+function CheckExpeditions() {
+	if (GetReadyExpeditions(true)) return true;
+	if (StartNextExpeditions(true)) return true;
+	return false;
+}
+
+function StartNextExpeditions(testonly = false) {
+	if (!testonly)	
+		setStatus("searching for new expeditions...");
 
 	var power_of_heroes = {};
 	var heroes = [];
 	var heroes_done = [];
 
-	GetReadyExpeditions();
+	if (!testonly) {
+		GetReadyExpeditions();
 
-	var result_heroes = callSync("heroGetAll");
-	try {
-		for (let [hkey, item] of Object.entries(result_heroes)) {
-			if (item.type == "hero") {
-				heroes.push(item.id);
-				power_of_heroes[item.id] = item.power;
+		var result_heroes = callSync("heroGetAll");
+		try {
+			for (let [hkey, item] of Object.entries(result_heroes)) {
+				if (item.type == "hero") {
+					heroes.push(item.id);
+					power_of_heroes[item.id] = item.power;
+				}
 			}
 		}
+		catch { }
 	}
-	catch { }
 
 	var result_exp = callSync("expeditionGet", {});
 	var exps = [];
@@ -337,6 +443,9 @@ function StartNextExpeditions() {
 			}
 		}
 
+		if (testonly) {
+			return exps.length > 0;
+        }
 
 		if (exps.length == 0) {
 			setStatus("zero expeditions available");
@@ -401,7 +510,7 @@ function StartNextExpeditions() {
 	}
 }
 
-function RaidOutland() {
+function RaidOutland(testonly=false) {
 
 	var result = callSync("bossGetAll");
 	try {
@@ -412,10 +521,13 @@ function RaidOutland() {
 			bosses++;
 			if (item.mayRaid == true) {
 				raids++;
-				callSync("bossRaid", { "bossId": item.id, "amount": 1, "starmoney": 0});
-				callSyncIdent("bossOpenChest", { "bossId": item.id, "amount": 1, "starmoney": 0 }, "group_1_body");
+				if (!testonly) {
+					callSync("bossRaid", { "bossId": item.id, "amount": 1, "starmoney": 0 });
+					callSyncIdent("bossOpenChest", { "bossId": item.id, "amount": 1, "starmoney": 0 }, "group_1_body");
+				}
 			}
-			setStatus(`${raids}/${bosses} raids`);
+			if (!testonly)
+				setStatus(`${raids}/${bosses} raids`);
 		}
 		return raids;
 	}
@@ -447,6 +559,17 @@ function SendGifts() {
 	{
 	}
 	return false;
+}
+
+function AstralSeer(testonly = false) {
+	//{"calls":[{"name":"ascensionChest_getInfo","args":{},"ident":"body"}]}
+	//result
+	//{"date":1665939058.793002,"results":[{"ident":"body","result":{"response":{"dailyGroups":["strength","mage"],"starmoneySpent":3000}}}]}
+	//{"date":1665943349.335986,"results":[{"ident":"body","result":{"response":{"dailyGroups":["strength","mage"],"starmoneySpent":3000}}}]}
+
+
+	callSync("ascensionChest_open", { "paid": false, "amount": 1 });
+
 }
 
 function callAPI0(std, success=null) {
@@ -494,30 +617,61 @@ function callAPI(std, ident=null, args={}, success=null, async=true) {
 	
 	headers["X-Auth-Signature"] = CheckSum(headers, json_request);
 	
-	$.ajax({
-		type: "POST",
-		url: "https://heroes-wb.nextersglobal.com/api/",
-		data: json_request,
-		contentType: "application/json; charset=utf-8",
-		dataType: "json",
-		headers: headers,
-		async: async,
-		success: function(data) {
-			try {
-				// console.log(JSON.stringify(data));
+	//$.ajax({
+	//	type: "POST",
+	//	url: "https://heroes-wb.nextersglobal.com/api/",
+	//	data: json_request,
+	//	contentType: "application/json; charset=utf-8",
+	//	dataType: "json",
+	//	headers: headers,
+	//	async: async,
+	//	success: function(data) {
+	//		try {
+	//			// console.log(JSON.stringify(data));
+	//			if (data && data.error) {
+	//				if (data && data.error.description) 
+	//					console.log("ERROR : " + data.error.description);
+	//				else
+	//					console.log("ERROR : " + data.error);
+	//			}
+	//			if (success) success(data);
+	//		} catch { }
+	//	},
+	//	error: function(errMsg) {
+	//		console.log(errMsg);
+	//	}
+	//});
+
+	var xhr = new XMLHttpRequest();
+	xhr.open("POST", "https://heroes-wb.nextersglobal.com/api/", async);
+	xhr.setRequestHeader('Content-Type', 'application/json; charset=utf-8');
+
+	for (let [key, value] of Object.entries(headers)) {
+		xhr.setRequestHeader(key, value);
+	};
+
+	xhr.onload = function () {
+		try {
+			if (xhr.status === 200) {
+				let data = JSON.parse(xhr.responseText);
 				if (data && data.error) {
-					if (data && data.error.description) 
+					if (data && data.error.description)
 						console.log("ERROR : " + data.error.description);
 					else
 						console.log("ERROR : " + data.error);
 				}
-				if (success) success(data);
-			} catch { }
-		},
-		error: function(errMsg) {
-			console.log(errMsg);
-		}
-	});
+				else
+					if (success) success(data);
+			}
+			else {
+				alert('Request failed.  Returned status of ' + xhr.status);
+			}
+		} catch (ex) {
+			console.log("EXCEPTION!");
+			console.log(ex);
+        }
+	};
+	xhr.send(json_request);
 }
 
 function stdCall(name, args, ident) {
@@ -540,12 +694,9 @@ function notify(message) {
 			catched_headers = message.catched_headers;
 			LastRequestId = message.lastrequestid;
 		}
-
 		if (buttons_added && catched_headers && !colors_done) {
-			for (const fid of footer_ids) {
-				$("#" + fid).parent().css("background-color", "green").css("color", "white");
-			}
-			colors_done = true;
+			css($(".layout-nav__help-user-ids"), "display", "none");
+
         }
 	} catch {
 	}
@@ -554,16 +705,28 @@ function notify(message) {
 var footer_ids = [];
 
 function addFooterSpan(id, txt, func = null) {
-	$("#" + id).parent().remove();
+	if ($("#" + id)) {
+		let p = $("#" + id).parentNode;
+		if (p)
+			p.remove();
+	}
 
 	if (!footer_ids.includes(id)) footer_ids.push(id);
 
-	var btn = $("<button class='user-control-menu-button' />");
-	var spn = $("<span id='" + id + "' class='user-control-menu-button-label'>" + txt + "</span>");
-	btn.append(spn);
-	$(".help-list-item").append(btn).append($("<div>&nbsp;</div>"));
-	
-	btn.on("click", function() { func(id); });
+	let btn = document.createElement('button');
+	let spn = document.createElement('span');
+	spn.id = id;
+	spn.className = "user-control-menu-button-label";
+	spn.textContent = txt;
+	btn.appendChild(spn);
+	$('.help-list-item')[0].appendChild(btn);
+
+	let space = document.createElement('div');
+	space.textContent = " . ";
+	$('.help-list-item')[0].appendChild(space);
+
+	if (func)
+		$("#" + id).onclick = function() { func(id); };
 }
 
 /**
