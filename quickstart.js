@@ -118,7 +118,7 @@ function CheckButtonStatus(checkthis = '') {
 
 function setStatus(txt) {
 	try {
-		$("#hwqsstatus").text(txt);
+		$("#hwqsstatus").innerText = txt;
 	} catch { }
 }
 
@@ -171,8 +171,10 @@ function btnClick(id) {
 	if (id == "GetDailyQuests") {
 		quests_requested = 0;
 		quests_done = 0;
-		if (timer_do_quests) 
+		if (timer_do_quests) {
 			clearInterval(timer_do_quests);
+			timer_do_quests = null;
+		}
 		else
 			timer_do_quests = setInterval(do_quests, 500);
 	}
@@ -204,12 +206,13 @@ function do_quests() {
 	quests_requested++;
 	if (quests_requested > 4) {
 		clearInterval(timer_do_quests);
+		timer_do_quests = null;
 		return;
 	}
 	
 	callAPI0("questGetAll", function (result) {
-		
-		result.forEach((quest) => {
+
+		for (let [key, quest] of Object.entries(result)) {
 			if (quest.state == 2) {
 				if (quest.progress > 0 && quest.reward.consumable)
 				{
@@ -224,7 +227,7 @@ function do_quests() {
 					callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
 				}
 			}
-		});
+		};
 	});
 }
 
@@ -324,7 +327,7 @@ function GetReadyExpeditions(testonly = false) {
 			try {
 				if (item.status && item.status == 2) {
 					i++;
-					if (item.endTime && new Date(item.endTime) < new Date()) {
+					if (item.endTime && new Date(item.endTime * 1000) < new Date()) {
 						if (testonly)
 							exp_ready = true;
                         else
@@ -340,7 +343,7 @@ function GetReadyExpeditions(testonly = false) {
 				for (let [kk, ii] of Object.entries(item)) {
 					if (ii.status && ii.status == 2) {
 						i++;
-						if (ii.endTime && new Date(ii.endTime) < new Date()) {
+						if (ii.endTime && new Date(ii.endTime * 1000) < new Date()) {
 							if (testonly)
 								exp_ready = true;
 							else
@@ -398,7 +401,7 @@ function StartNextExpeditions(testonly = false) {
 			try {
 				var still_running = false;
 
-				if (item.status && item.endTime && new Date(item.endTime) > new Date())
+				if (item.status && item.endTime && new Date(item.endTime * 1000) > new Date())
 					still_running = true;
 
 				if ((still_running || item.status && item.status != 2) && (item.heroes && item.heroes.length > 0)) {
@@ -420,7 +423,7 @@ function StartNextExpeditions(testonly = false) {
 				for (let [kk, ii] of Object.entries(item)) {
 					var still_running = false;
 
-					if (ii.status && ii.endTime && new Date(ii.endTime) > new Date())
+					if (ii.status && ii.endTime && new Date(ii.endTime * 1000) > new Date())
 						still_running = true;
 
 					if ((still_running || ii.status && ii.status != 2) && (ii.heroes && ii.heroes.length > 0)) {
@@ -574,23 +577,19 @@ function AstralSeer(testonly = false) {
 
 function callAPI0(std, success=null) {
 	callAPI(std, "body", {}, function (data) {
-		success(data.results[0].result.response);
+		success(data);
 	});
 }
 
 function callSync(std, args = {}) {
 	var result = null;
-	callAPI(std, "body", args = args, function (data) {
-		result = data.results[0].result.response;
-	}, false);
+	callAPI(std, "body", args = args, function (data) { result = data; }, false);
 	return result;
 }
 
 function callSyncIdent(std, args = {}, ident) {
 	var result = null;
-	callAPI(std, ident, args = args, function (data) {
-		result = data.results[0].result.response;
-	}, false);
+	callAPI(std, ident, args = args, function (data) { result = data; }, false);
 	return result;
 }
 
@@ -616,31 +615,6 @@ function callAPI(std, ident=null, args={}, success=null, async=true) {
 	});
 	
 	headers["X-Auth-Signature"] = CheckSum(headers, json_request);
-	
-	//$.ajax({
-	//	type: "POST",
-	//	url: "https://heroes-wb.nextersglobal.com/api/",
-	//	data: json_request,
-	//	contentType: "application/json; charset=utf-8",
-	//	dataType: "json",
-	//	headers: headers,
-	//	async: async,
-	//	success: function(data) {
-	//		try {
-	//			// console.log(JSON.stringify(data));
-	//			if (data && data.error) {
-	//				if (data && data.error.description) 
-	//					console.log("ERROR : " + data.error.description);
-	//				else
-	//					console.log("ERROR : " + data.error);
-	//			}
-	//			if (success) success(data);
-	//		} catch { }
-	//	},
-	//	error: function(errMsg) {
-	//		console.log(errMsg);
-	//	}
-	//});
 
 	var xhr = new XMLHttpRequest();
 	xhr.open("POST", "https://heroes-wb.nextersglobal.com/api/", async);
@@ -660,6 +634,8 @@ function callAPI(std, ident=null, args={}, success=null, async=true) {
 					else
 						console.log("ERROR : " + data.error);
 				}
+				if (data.results && data.results.length && data.results[0].result)
+					return success(data.results[0].result.response);
 				else
 					if (success) success(data);
 			}
