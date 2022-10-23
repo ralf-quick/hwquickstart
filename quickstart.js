@@ -12,6 +12,9 @@ console.log("HWQS page!");
 var running_check = setInterval(checkHWRunningTimer, 2000);
 var button_check = setInterval(CheckButtonStatus, 3000);
 
+var running = {};
+var checking = {};
+
 var quests_done = 0;
 var quests_requested = 0;
 var timer_do_quests = null;
@@ -21,7 +24,14 @@ var chestBuy_done = false;
 var offerFarmReward_done = false;
 var subscriptionFarm_done = false;
 var zeppelinGiftFarm_done = false;
+var ascensionChest_done = false;
 
+var colors_done = false;
+var footer_ids = [];
+
+var check_button = 0;
+
+// no jQuery
 window.$ = function (selector) {
 	var selectorType = 'querySelectorAll';
 
@@ -29,7 +39,6 @@ window.$ = function (selector) {
 		selectorType = 'getElementById';
 		selector = selector.substr(1, selector.length);
 	}
-
 	return document[selectorType](selector);
 };
 
@@ -47,18 +56,41 @@ function css(element_list, style, value) {
 	} catch { }
 }
 
-function make_green(p) {
-	css(p, "background-color", "green");
-	css(p, "color", "white");
+function make_green(id) {
+	try {
+		let p = $("#" + id).parentNode;
+		css(p, "background-color", "green");
+		css(p, "color", "white");
+	} catch { }
 }
 
-function clear_green(p) {
-	css(p, "background-color", "");
-	css(p, "color", "");
+function make_orange(id) {
+	try {
+		let p = $("#" + id).parentNode;
+		css(p, "background-color", "orange");
+		css(p, "color", "white");
+	} catch { }
 }
+
+function make_gray(id) {
+	try {
+		let p = $("#" + id).parentNode;
+		css(p, "background-color", "darkgray");
+		css(p, "color", "white");
+	} catch { }
+}
+
+function clear_green(id) {
+	try {
+		let p = $("#" + id).parentNode;
+		css(p, "background-color", "");
+		css(p, "color", "");
+	} catch { }
+}
+
 function checkHWRunningTimer() {
 
-	browser.runtime.sendMessage("ping");  // response are catched_headers from proxy (see notify)
+	browser.runtime.sendMessage("ping");  // response to ping are catched_headers from background script (see notify)
 
 	if (!buttons_added) {
 		addFooterSpan("Something", "quick", btnClick);
@@ -72,7 +104,6 @@ function checkHWRunningTimer() {
 	}
 }
 
-var check_button = 0;
 function CheckButtonStatus(checkthis = '') {
 	check_button++;
 	if (check_button > 6) check_button = 1;
@@ -82,36 +113,44 @@ function CheckButtonStatus(checkthis = '') {
 	let checked = false;
 	if (check_button == 1 || checkthis == "Something") {
 		id = "Something";
+		make_orange(id);
+		checked = true;
+		can_go = CheckSomething();
 	}
 	if (check_button == 2 || checkthis == "GetDailyQuests") {
 		id = "GetDailyQuests";
+		make_orange(id);
+		checked = true;
+		can_go = do_quests(true);
 	}
 	if (check_button == 3 || checkthis == "RaidOutland") {
 		id = "RaidOutland";
+		make_orange(id);
 		checked = true;
 		can_go = RaidOutland(true);
 	}
 	if (check_button == 4 || checkthis == "Tower") {
 		id = "Tower";
+		make_orange(id);
 		checked = true;
 		can_go = CheckTowerReady();
 	}
-	if (check_button == 4 || checkthis == "Expeditions") {
+	if (check_button == 5 || checkthis == "Expeditions") {
 		id = "Expeditions";
+		make_orange(id);
 		checked = true;
 		can_go = CheckExpeditions();
 	}
 
 	if (id && id.length > 0) {
-		let p = $("#" + id).parentNode;
 		if (checked) {
 			if (can_go)
-				make_green(p);
+				make_green(id);
 			else
-				clear_green(p);
+				clear_green(id);
 		} else {
 			if (buttons_added && catched_headers)
-				make_green(p);
+				make_green(id);
 		}
 	}
 }
@@ -120,6 +159,16 @@ function setStatus(txt) {
 	try {
 		$("#hwqsstatus").innerText = txt;
 	} catch { }
+}
+
+function CheckSomething() {
+	if (!chestBuy_done) return true;
+	if (!offerFarmReward_done) return true;
+	if (!subscriptionFarm_done) return true;
+	if (!zeppelinGiftFarm_done) return true;
+	if (!ascensionChest_done) return true;
+	if (SendMails(true)) return true;
+	if (SendGifts(true)) return true;
 }
 
 function btnClick(id) {
@@ -152,20 +201,16 @@ function btnClick(id) {
 					zeppelinGiftFarm_done = true;
 					done += " zeppelin "; setStatus(done + " done"); 
 				} );
+		if (!ascensionChest_done) {
+			if (AstralSeer()) {
+				ascensionChest_done = true;
+				done += " seer "; setStatus(done + " done");
+			}
+		}
 		
 		if (SendGifts()) { done += " gift "; setStatus(done + " done"); }
 
-		callAPI0("mailGetAll", function (result) {
-			var lc = 0;
-			for (let [key, letter] of Object.entries(result.letters)) {
-				if (letter.read == "0") {
-					callSync("mailFarm", {"letterIds":[ letter.id ]} );
-					lc++;
-				}
-			};
-			done += lc.toString() + " mails"; setStatus(done + " done");
-		});
-		callSync("ascensionChest_open", { "paid": false, "amount": 1 });
+		if (SendMails()) { done += " mails"; setStatus(done + " done"); }
 	}
 	
 	if (id == "GetDailyQuests") {
@@ -174,17 +219,21 @@ function btnClick(id) {
 		if (timer_do_quests) {
 			clearInterval(timer_do_quests);
 			timer_do_quests = null;
-		}
-		else
+			running[id] = false;
+		} else {
 			timer_do_quests = setInterval(do_quests, 500);
+			running[id] = true;
+		}
 	}
 	
 	if (id == "RaidOutland") {
+		running[id] = true;
 		RaidOutland();
 		CheckButtonStatus(id);
 	}
 	
 	if (id == "Tower") {
+		running[id] = true;
 		setTimeout(function () {
 			FullTower();
 			CheckButtonStatus(id);
@@ -192,16 +241,38 @@ function btnClick(id) {
 	}
 	
 	if (id == "Expeditions") {
+		running[id] = true;
 		setTimeout(function () {
 			StartNextExpeditions();
 			CheckButtonStatus(id);
+			running[id] = false;
 		}, 100);
 	}
+
+	if (running[id]) {
+		make_orange(id);
+    }
 }
 
-function do_quests() {
-	
-	setStatus(quests_done.toString() + " quests done");
+function SendMails(testonly = false) {
+	callAPI0("mailGetAll", function (result) {
+		var lc = 0;
+		for (let [key, letter] of Object.entries(result.letters)) {
+			if (letter.read == "0") {
+				if (testonly) return true;
+				callSync("mailFarm", { "letterIds": [letter.id] });
+				lc++;
+			}
+		};
+		return true;
+	});
+	return false;
+}
+
+function do_quests(testonly=false) {
+
+	if (!testonly)
+		setStatus(quests_done.toString() + " quests done");
 
 	quests_requested++;
 	if (quests_requested > 4) {
@@ -209,6 +280,9 @@ function do_quests() {
 		timer_do_quests = null;
 		return;
 	}
+
+	// callAPI(std, ident="body", args={}, success=null, 
+	// async = !testonly)
 	
 	callAPI0("questGetAll", function (result) {
 
@@ -540,13 +614,14 @@ function RaidOutland(testonly=false) {
 	return 0;
 }
 
-function SendGifts() {
+function SendGifts(testonly = false) {
 	result = callSync("clanGetAvailableDailyGifts");
 	try {
 		var found = false;
 		for (let [key, item] of Object.entries(result)) {
 			for (let [ky, ii] of Object.entries(item)) {
 				found = true;
+				if (testonly) return true;
 			}
 		}
 		if (found) {
@@ -570,9 +645,13 @@ function AstralSeer(testonly = false) {
 	//{"date":1665939058.793002,"results":[{"ident":"body","result":{"response":{"dailyGroups":["strength","mage"],"starmoneySpent":3000}}}]}
 	//{"date":1665943349.335986,"results":[{"ident":"body","result":{"response":{"dailyGroups":["strength","mage"],"starmoneySpent":3000}}}]}
 
-
-	callSync("ascensionChest_open", { "paid": false, "amount": 1 });
-
+	let result = callSync("ascensionChest_getInfo");
+	for (let [key, item] of Object.entries(result)) {
+		if (!testonly)
+			callSync("ascensionChest_open", { "paid": false, "amount": 1 });
+		return true;
+	}
+	return false;
 }
 
 function callAPI0(std, success=null) {
@@ -597,7 +676,11 @@ function callAPI(std, ident=null, args={}, success=null, async=true) {
 	
 	var json_request = JSON.stringify(stdCall(std,args,ident));
 	var headers = {};
-	
+
+	if (!catched_headers) {
+		console.log("headers missing");
+		return;
+	}
 	catched_headers.forEach((entry) => 
 	{
 		var v = entry.value;
@@ -663,7 +746,7 @@ function CheckSum(headers, data) {
 	return MD5(d);
 }
 
-var colors_done = false;
+
 function notify(message) {
 	try {
 		if (message.catched_headers != null) {
@@ -678,7 +761,7 @@ function notify(message) {
 	}
 }
 
-var footer_ids = [];
+
 
 function addFooterSpan(id, txt, func = null) {
 	if ($("#" + id)) {
@@ -687,6 +770,8 @@ function addFooterSpan(id, txt, func = null) {
 			p.remove();
 	}
 
+	if (!running.hasOwnProperty(id)) running[id] = false;
+	if (!checking.hasOwnProperty(id)) checking[id] = false;
 	if (!footer_ids.includes(id)) footer_ids.push(id);
 
 	let btn = document.createElement('button');
@@ -703,42 +788,4 @@ function addFooterSpan(id, txt, func = null) {
 
 	if (func)
 		$("#" + id).onclick = function() { func(id); };
-}
-
-/**
- * Generate all combinations of an array.
- * @param {Array} sourceArray - Array of input elements.
- * @param {number} comboLength - Desired length of combinations.
- * @return {Array} Array of combination arrays.
- */
-function generateCombinations(sourceArray, comboLength) {
-	const sourceLength = sourceArray.length;
-	if (comboLength > sourceLength) return [];
-
-	const combos = []; // Stores valid combinations as they are generated.
-
-	// Accepts a partial combination, an index into sourceArray, 
-	// and the number of elements required to be added to create a full-length combination.
-	// Called recursively to build combinations, adding subsequent elements at each call depth.
-	const makeNextCombos = (workingCombo, currentIndex, remainingCount) => {
-		const oneAwayFromComboLength = remainingCount == 1;
-
-		// For each element that remaines to be added to the working combination.
-		for (let sourceIndex = currentIndex; sourceIndex < sourceLength; sourceIndex++) {
-			// Get next (possibly partial) combination.
-			const next = [...workingCombo, sourceArray[sourceIndex]];
-
-			if (oneAwayFromComboLength) {
-				// Combo of right length found, save it.
-				combos.push(next);
-			}
-			else {
-				// Otherwise go deeper to add more elements to the current partial combination.
-				makeNextCombos(next, sourceIndex + 1, remainingCount - 1);
-			}
-		}
-	}
-
-	makeNextCombos([], 0, comboLength);
-	return combos;
 }
