@@ -9,8 +9,8 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
 
 console.log("HWQS page!");
 
-var running_check = setInterval(checkHWRunningTimer, 2000);
-var button_check = setInterval(CheckButtonStatus, 3000);
+var running_check = setInterval(checkHWRunningTimer, 2200);
+var button_check = setInterval(CheckButtonStatus, 3300);
 
 var running = {};
 var checking = {};
@@ -113,33 +113,43 @@ function CheckButtonStatus(checkthis = '') {
 	let checked = false;
 	if (check_button == 1 || checkthis == "Something") {
 		id = "Something";
-		make_orange(id);
-		checked = true;
-		can_go = CheckSomething();
+		if (!running[id]) {
+			make_orange(id);
+			checked = true;
+			can_go = CheckSomething();
+		}
 	}
 	if (check_button == 2 || checkthis == "GetDailyQuests") {
 		id = "GetDailyQuests";
-		make_orange(id);
-		checked = true;
-		can_go = do_quests(true);
+		if (!running[id]) {
+			make_orange(id);
+			checked = true;
+			can_go = do_quests(true);
+		}
 	}
 	if (check_button == 3 || checkthis == "RaidOutland") {
 		id = "RaidOutland";
-		make_orange(id);
-		checked = true;
-		can_go = RaidOutland(true);
+		if (!running[id]) {
+			make_orange(id);
+			checked = true;
+			can_go = RaidOutland(true);
+		}
 	}
 	if (check_button == 4 || checkthis == "Tower") {
 		id = "Tower";
-		make_orange(id);
-		checked = true;
-		can_go = CheckTowerReady();
+		if (!running[id]) {
+			make_orange(id);
+			checked = true;
+			can_go = CheckTowerReady();
+		}
 	}
 	if (check_button == 5 || checkthis == "Expeditions") {
 		id = "Expeditions";
-		make_orange(id);
-		checked = true;
-		can_go = CheckExpeditions();
+		if (!running[id]) {
+			make_orange(id);
+			checked = true;
+			can_go = CheckExpeditions();
+		}
 	}
 
 	if (id && id.length > 0) {
@@ -351,6 +361,7 @@ function FullTower() {
 				setTimeout(function () {
 					callSync("tower_farmSkullReward", {});
 					setStatus(`tower&skull done`);
+					running["Tower"] = false;
 				}, 1000);
 			}, 1000);
 			lastFloorNumber = 9999;
@@ -644,6 +655,8 @@ function AstralSeer(testonly = false) {
 	//result
 	//{"date":1665939058.793002,"results":[{"ident":"body","result":{"response":{"dailyGroups":["strength","mage"],"starmoneySpent":3000}}}]}
 	//{"date":1665943349.335986,"results":[{"ident":"body","result":{"response":{"dailyGroups":["strength","mage"],"starmoneySpent":3000}}}]}
+	//{ dailyGroups: (2) […], starmoneySpent: 3000 }
+	//	dailyGroups: Array["intelligence", "healer"]	starmoneySpent: 3000
 
 	let result = callSync("ascensionChest_getInfo");
 	for (let [key, item] of Object.entries(result)) {
