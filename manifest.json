@@ -16,7 +16,14 @@
   "content_scripts": [
     {
       "matches": [ "https://www.hero-wars.com/*" ],
-      "js": [ "webextension-polyfill.js", "md5.js", "generatorics.js", "quickstart.js" ]
+      "js": [
+        "webextension-polyfill.js",
+        "md5.js",
+        "generatorics.js",
+        "helpers.js",
+        "restapi.js",
+        "quickstart.js"
+      ]
     }
   ],
 

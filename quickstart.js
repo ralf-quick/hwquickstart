@@ -31,62 +31,7 @@ var footer_ids = [];
 
 var check_button = 0;
 
-// no jQuery
-window.$ = function (selector) {
-	var selectorType = 'querySelectorAll';
 
-	if (selector.indexOf('#') === 0) {
-		selectorType = 'getElementById';
-		selector = selector.substr(1, selector.length);
-	}
-	return document[selectorType](selector);
-};
-
-function css(element_list, style, value) {
-	try {
-		if (!element_list) return;
-
-		if (!element_list.length) {
-			element_list.style[style] = value;
-			return;
-		}
-		for (let paragraph of element_list) {
-			paragraph.style[style] = value;
-		}
-	} catch { }
-}
-
-function make_green(id) {
-	try {
-		let p = $("#" + id).parentNode;
-		css(p, "background-color", "green");
-		css(p, "color", "white");
-	} catch { }
-}
-
-function make_orange(id) {
-	try {
-		let p = $("#" + id).parentNode;
-		css(p, "background-color", "orange");
-		css(p, "color", "white");
-	} catch { }
-}
-
-function make_gray(id) {
-	try {
-		let p = $("#" + id).parentNode;
-		css(p, "background-color", "darkgray");
-		css(p, "color", "white");
-	} catch { }
-}
-
-function clear_green(id) {
-	try {
-		let p = $("#" + id).parentNode;
-		css(p, "background-color", "");
-		css(p, "color", "");
-	} catch { }
-}
 
 function checkHWRunningTimer() {
 
@@ -104,65 +49,66 @@ function checkHWRunningTimer() {
 	}
 }
 
+var checking = false;
 function CheckButtonStatus(checkthis = '') {
-	check_button++;
-	if (check_button > 6) check_button = 1;
 
-	let id = "";
-	let can_go = false;
-	let checked = false;
-	if (check_button == 1 || checkthis == "Something") {
-		id = "Something";
-		if (!running[id]) {
-			make_orange(id);
-			checked = true;
-			can_go = CheckSomething();
-		}
-	}
-	if (check_button == 2 || checkthis == "GetDailyQuests") {
-		id = "GetDailyQuests";
-		if (!running[id]) {
-			make_orange(id);
-			checked = true;
-			can_go = do_quests(true);
-		}
-	}
-	if (check_button == 3 || checkthis == "RaidOutland") {
-		id = "RaidOutland";
-		if (!running[id]) {
-			make_orange(id);
-			checked = true;
-			can_go = RaidOutland(true);
-		}
-	}
-	if (check_button == 4 || checkthis == "Tower") {
-		id = "Tower";
-		if (!running[id]) {
-			make_orange(id);
-			checked = true;
-			can_go = CheckTowerReady();
-		}
-	}
-	if (check_button == 5 || checkthis == "Expeditions") {
-		id = "Expeditions";
-		if (!running[id]) {
-			make_orange(id);
-			checked = true;
-			can_go = CheckExpeditions();
-		}
-	}
+	if (!catched_headers) return;
 
-	if (id && id.length > 0) {
-		if (checked) {
+	if (checking) return;
+
+	checking = true;
+
+	try {
+		check_button++;
+		if (check_button > 6) check_button = 1;
+
+		let id = "";
+		let can_go = false;
+		if (check_button == 1 || checkthis == "Something") {
+			id = "Something";
+			if (!running[id]) {
+				make_orange(id);
+				can_go = CheckSomething();
+			}
+		}
+		if (check_button == 2 || checkthis == "GetDailyQuests") {
+			id = "GetDailyQuests";
+			if (!running[id]) {
+				make_orange(id);
+				can_go = do_quests(true);
+			}
+		}
+		if (check_button == 3 || checkthis == "RaidOutland") {
+			id = "RaidOutland";
+			if (!running[id]) {
+				make_orange(id);
+				can_go = RaidOutland(true);
+			}
+		}
+		if (check_button == 4 || checkthis == "Tower") {
+			id = "Tower";
+			if (!running[id]) {
+				make_orange(id);
+				can_go = CheckTowerReady();
+			}
+		}
+		if (check_button == 5 || checkthis == "Expeditions") {
+			id = "Expeditions";
+			if (!running[id]) {
+				make_orange(id);
+				can_go = CheckExpeditions();
+			}
+		}
+
+		if (id && id.length > 0) {
 			if (can_go)
 				make_green(id);
 			else
-				clear_green(id);
-		} else {
-			if (buttons_added && catched_headers)
-				make_green(id);
+				setInterval(function () { clear_color(id); }, 1000);
 		}
-	}
+	} catch { }
+
+	checking = false;
 }
 
 function setStatus(txt) {
@@ -179,9 +125,12 @@ function CheckSomething() {
 	if (!ascensionChest_done) return true;
 	if (SendMails(true)) return true;
 	if (SendGifts(true)) return true;
+	return false;
 }
 
 function btnClick(id) {
+	if (!catched_headers) return;
+
 	if (id == "Something") {
 		var done = "";
 		
@@ -221,6 +170,8 @@ function btnClick(id) {
 		if (SendGifts()) { done += " gift "; setStatus(done + " done"); }
 
 		if (SendMails()) { done += " mails"; setStatus(done + " done"); }
+
+		clear_color(id);
 	}
 	
 	if (id == "GetDailyQuests") {
@@ -285,7 +236,7 @@ function do_quests(testonly=false) {
 		setStatus(quests_done.toString() + " quests done");
 
 	quests_requested++;
-	if (quests_requested > 4) {
+	if (quests_requested > 4 && !testonly) {
 		clearInterval(timer_do_quests);
 		timer_do_quests = null;
 		return;
@@ -300,23 +251,23 @@ function do_quests(testonly=false) {
 			if (quest.state == 2) {
 				if (quest.progress > 0 && quest.reward.consumable)
 				{
+					if (testonly) return true;
 					callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
 				}
 				if (quest.progress == 3 && quest.reward && !quest.reward.battlePassExp)
 				{
+					if (testonly) return true;
 					callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
 				}
 				if (quest.progress > 0 && quest.reward && (quest.reward.coin || quest.reward.gold || quest.reward.stamina))
 				{
+					if (testonly) return true;
 					callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
 				}
 			}
 		};
 	});
-}
-
-function getRandomInt(min, max) {
-	return Math.floor(Math.random() * (max - min + 1)) + min;
+	return false;
 }
 
 function randomChestNr() {
@@ -667,88 +618,6 @@ function AstralSeer(testonly = false) {
 	return false;
 }
 
-function callAPI0(std, success=null) {
-	callAPI(std, "body", {}, function (data) {
-		success(data);
-	});
-}
-
-function callSync(std, args = {}) {
-	var result = null;
-	callAPI(std, "body", args = args, function (data) { result = data; }, false);
-	return result;
-}
-
-function callSyncIdent(std, args = {}, ident) {
-	var result = null;
-	callAPI(std, ident, args = args, function (data) { result = data; }, false);
-	return result;
-}
-
-function callAPI(std, ident=null, args={}, success=null, async=true) {
-	
-	var json_request = JSON.stringify(stdCall(std,args,ident));
-	var headers = {};
-
-	if (!catched_headers) {
-		console.log("headers missing");
-		return;
-	}
-	catched_headers.forEach((entry) => 
-	{
-		var v = entry.value;
-		if (entry.name == "X-Request-Id") {
-			v = (LastRequestId++).toString();
-		}
-
-		if (entry.name.startsWith("X-")) {
-			headers[entry.name] = v;
-		}
-
-		if (entry.name != "X-Auth-Signature") {
-			headers[entry.name] = v;
-		}
-	});
-	
-	headers["X-Auth-Signature"] = CheckSum(headers, json_request);
-
-	var xhr = new XMLHttpRequest();
-	xhr.open("POST", "https://heroes-wb.nextersglobal.com/api/", async);
-	xhr.setRequestHeader('Content-Type', 'application/json; charset=utf-8');
-
-	for (let [key, value] of Object.entries(headers)) {
-		xhr.setRequestHeader(key, value);
-	};
-
-	xhr.onload = function () {
-		try {
-			if (xhr.status === 200) {
-				let data = JSON.parse(xhr.responseText);
-				if (data && data.error) {
-					if (data && data.error.description)
-						console.log("ERROR : " + data.error.description);
-					else
-						console.log("ERROR : " + data.error);
-				}
-				if (data.results && data.results.length && data.results[0].result)
-					return success(data.results[0].result.response);
-				else
-					if (success) success(data);
-			}
-			else {
-				alert('Request failed.  Returned status of ' + xhr.status);
-			}
-		} catch (ex) {
-			console.log("EXCEPTION!");
-			console.log(ex);
-        }
-	};
-	xhr.send(json_request);
-}
-
-function stdCall(name, args, ident) {
-	return { "calls": [{"name": name, "args": args, "ident": (ident == null ? name : ident)}]};
-}
 
 function CheckSum(headers, data) {
 	var d = [headers["X-Request-Id"],
