@@ -3,6 +3,8 @@ var catched_headers = null;
 
 console.log('HWQS proxy started');
 
+var client_data = {};
+
 browser.runtime.onMessage.addListener(async (msg, sender) => {
 	notify(msg);
 });
@@ -12,17 +14,30 @@ browser.webRequest.onBeforeSendHeaders.addListener(inspectRequest, {urls: ["<all
 function sendMessageToTabs(tabs) {
   for (const tab of tabs) {
     browser.tabs
-      .sendMessage(tab.id, { lastrequestid: LastRequestId, catched_headers: catched_headers })
+		.sendMessage(tab.id, { ping: true, lastrequestid: LastRequestId, catched_headers: catched_headers, data: client_data })
+      .catch(onError);
+  }
+}
+
+function sendDataToTabs(tabs) {
+  for (const tab of tabs) {
+    browser.tabs
+      .sendMessage(tab.id, { ping: false, data: client_data })
       .catch(onError);
   }
 }
 
 function notify(message) {
 	try {
-		browser.tabs
-			.query({ currentWindow: true, active: true, })
-			.then(sendMessageToTabs)
-			.catch(onError);
+		if (message && message == "ping") {
+			browser.tabs
+				.query({ currentWindow: true, active: true, })
+				.then(sendMessageToTabs)
+				.catch(onError);
+		}
+		if (message && message.store && message.what && message.value) {
+			client_data[message.what] = message.value;
+		}
 	} catch (ex) {
 		console.log(`exception: ${ex}`);
 	}

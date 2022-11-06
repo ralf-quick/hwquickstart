@@ -52,6 +52,8 @@ function callAPI(std, ident = null, args = {}, success = null, async = true) {
 		xhr.setRequestHeader(key, value);
 	};
 
+	var result;
+
 	xhr.onload = function () {
 		try {
 			if (xhr.status === 200) {
@@ -70,12 +72,17 @@ function callAPI(std, ident = null, args = {}, success = null, async = true) {
 			else {
 				alert('Request failed.  Returned status of ' + xhr.status);
 			}
+
+			if (!async) result = data;
+
 		} catch (ex) {
 			console.log("EXCEPTION!");
 			console.log(ex);
 		}
 	};
 	xhr.send(json_request);
+
+	if (!async) return result;
 }
 
 function stdCall(name, args, ident) {

@@ -30,7 +30,7 @@ var colors_done = false;
 var footer_ids = [];
 
 var check_button = 0;
-
+var server_stored_data = {};
 
 
 function checkHWRunningTimer() {
@@ -48,6 +48,8 @@ function checkHWRunningTimer() {
 		buttons_added = true;
 	}
 }
+
+// {"name":"chatGetAll","args":{"chatType":"clan"},"ident":"group_3_body"}
 
 var checking = false;
 function CheckButtonStatus(checkthis = '') {
@@ -75,7 +77,14 @@ function CheckButtonStatus(checkthis = '') {
 			id = "GetDailyQuests";
 			if (!running[id]) {
 				make_orange(id);
-				can_go = do_quests(true);
+				do_quests(true, function (ok) {
+					if (ok)
+						make_green(id);
+					else
+						setInterval(function () { clear_color(id); }, 1000);
+				});
+				checking = false;
+				return;
 			}
 		}
 		if (check_button == 3 || checkthis == "RaidOutland") {
@@ -137,7 +146,8 @@ function btnClick(id) {
 		if (!chestBuy_done)
 			callAPI("chestBuy", "body", {"chest":"town","free":true,"pack":false}, 
 				function(d) { 
-					chestBuy_done = true; done += " chest "; setStatus(done + " done"); 
+					chestBuy_done = true; done += " chest "; setStatus(done + " done");
+					browser.runtime.sendMessage({ store: true, what: "chestBuy", value: new Date() })
 				} );
 
 		if (!offerFarmReward_done)
@@ -145,6 +155,7 @@ function btnClick(id) {
 				function(d) { 
 					offerFarmReward_done = true; 
 					done += " skin "; setStatus(done + " done"); 
+					browser.runtime.sendMessage({ store: true, what: "offerFarmReward", value: new Date() })
 				} );
 		
 		if (!subscriptionFarm_done)
@@ -152,6 +163,7 @@ function btnClick(id) {
 				function(d) { 
 					subscriptionFarm_done = true; 
 					done += " subs "; setStatus(done + " done"); 
+					browser.runtime.sendMessage({ store: true, what: "subscriptionFarm", value: new Date() })
 				});
 				
 		if (!zeppelinGiftFarm_done)
@@ -159,11 +171,13 @@ function btnClick(id) {
 				function(d) { 
 					zeppelinGiftFarm_done = true;
 					done += " zeppelin "; setStatus(done + " done"); 
+					browser.runtime.sendMessage({ store: true, what: "zeppelinGiftFarm", value: new Date() })
 				} );
 		if (!ascensionChest_done) {
 			if (AstralSeer()) {
 				ascensionChest_done = true;
 				done += " seer "; setStatus(done + " done");
+				browser.runtime.sendMessage({ store: true, what: "ascensionChest", value: new Date() })
 			}
 		}
 		
@@ -230,44 +244,59 @@ function SendMails(testonly = false) {
 	return false;
 }
 
-function do_quests(testonly=false) {
+function do_quests(testonly=false, testresult=undefined) {
+
+	var quests = false;
 
 	if (!testonly)
 		setStatus(quests_done.toString() + " quests done");
 
+	if (testonly && timer_do_quests) {
+		if (testresult) testresult(false);
+		return false;
+	}
 	quests_requested++;
 	if (quests_requested > 4 && !testonly) {
 		clearInterval(timer_do_quests);
 		timer_do_quests = null;
+		quests_requested = 0;
+		running["GetDailyQuests"] = false;
 		return;
 	}
 
-	// callAPI(std, ident="body", args={}, success=null, 
-	// async = !testonly)
-	
-	callAPI0("questGetAll", function (result) {
-
+	callAPI("questGetAll", "body", {}, function (result) { 
 		for (let [key, quest] of Object.entries(result)) {
 			if (quest.state == 2) {
 				if (quest.progress > 0 && quest.reward.consumable)
 				{
-					if (testonly) return true;
-					callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
+					if (testonly) {
+						if (testresult) testresult(true);
+						return;
+					} else
+						callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
 				}
 				if (quest.progress == 3 && quest.reward && !quest.reward.battlePassExp)
 				{
-					if (testonly) return true;
-					callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
+					if (testonly) {
+						if (testresult) testresult(true);
+						return;
+					} else
+						callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
 				}
 				if (quest.progress > 0 && quest.reward && (quest.reward.coin || quest.reward.gold || quest.reward.stamina))
 				{
-					if (testonly) return true;
-					callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
+					if (testonly) {
+						if (testresult) testresult(true);
+						return;
+					} else
+						callAPI("questFarm", "body", {"questId": quest.id}, function(d) { quests_done++; } );
 				}
 			}
 		};
+		if (testonly) {
+			if (testresult) testresult(false);
+		}
 	});
-	return false;
 }
 
 function randomChestNr() {
@@ -292,7 +321,7 @@ function FullTower() {
 		var info = GetTowerInfo();
 		lastFloorNumber = info.lastFloorNumber;
 
-		setStatus(`floor ${info.floorType} ${last_chest_opened ? 'top' : lastFloorNumber}`);
+		setStatus(`floor ${last_chest_opened ? 'top' : lastFloorNumber}`);
 
 		if (info.floorType == "chest" && lastFloorNumber <= 50 && !last_chest_opened) {
 			if (lastFloorNumber == 50) last_chest_opened = true;
@@ -302,7 +331,7 @@ function FullTower() {
 			callSync("towerNextChest", {});
 		}
 		if ((info.floorType == "chest" && lastFloorNumber == 50 && last_chest_opened)
-			// verpasst ?
+			// skipped ?
 			|| (retry == 1 && lastFloorNumber == 50 && info.floorType == "opened")
 		) {
 			setTimeout(function () {
@@ -637,8 +666,24 @@ function notify(message) {
 		}
 		if (buttons_added && catched_headers && !colors_done) {
 			css($(".layout-nav__help-user-ids"), "display", "none");
-
-        }
+		}
+		if (message.data) {
+			server_stored_data = message.data;
+			let now = new Date();
+			let recheck = 4;
+			if (server_stored_data["chestBuy"]) {
+				chestBuy_done = (server_stored_data["chestBuy"].addHours(recheck) > now);
+			}
+			if (server_stored_data["offerFarmReward"]) {
+				offerFarmReward_done = (server_stored_data["offerFarmReward"].addHours(recheck) > now);
+			}
+			if (server_stored_data["subscriptionFarm"]) {
+				subscriptionFarm_done = (server_stored_data["subscriptionFarm"].addHours(recheck) > now);
+			}
+			if (server_stored_data["ascensionChest"]) {
+				ascensionChest_done = (server_stored_data["ascensionChest"].addHours(recheck) > now);
+			}
+		}
 	} catch {
 	}
 }

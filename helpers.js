@@ -68,3 +68,8 @@ function make_color(p, fg, bg) {
 function getRandomInt(min, max) {
 	return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+Date.prototype.addHours = function (h) {
+	this.setTime(this.getTime() + (h * 60 * 60 * 1000));
+	return this;
+}
