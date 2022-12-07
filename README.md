@@ -6,3 +6,5 @@
 
 **This add-on injects buttons into hw pages. This should speed up HW**
 
+**Mails are on extra button now**
+

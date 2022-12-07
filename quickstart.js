@@ -39,6 +39,7 @@ function checkHWRunningTimer() {
 
 	if (!buttons_added) {
 		addFooterSpan("Something", "quick", btnClick);
+		addFooterSpan("Mails", "mails", btnClick);
 		addFooterSpan("GetDailyQuests", "daily", btnClick);
 		addFooterSpan("RaidOutland", "outland", btnClick);
 		addFooterSpan("Tower", "tower", btnClick);
@@ -62,7 +63,7 @@ function CheckButtonStatus(checkthis = '') {
 
 	try {
 		check_button++;
-		if (check_button > 6) check_button = 1;
+		if (check_button > 7) check_button = 1;
 
 		let id = "";
 		let can_go = false;
@@ -109,6 +110,14 @@ function CheckButtonStatus(checkthis = '') {
 			}
 		}
 
+		if (check_button == 6 || checkthis == "Mails") {
+			id = "Mails";
+			if (!running[id]) {
+				make_orange(id);
+				can_go = SendMails(true);
+			}
+		}
+
 		if (id && id.length > 0) {
 			if (can_go)
 				make_green(id);
@@ -132,7 +141,6 @@ function CheckSomething() {
 	if (!subscriptionFarm_done) return true;
 	if (!zeppelinGiftFarm_done) return true;
 	if (!ascensionChest_done) return true;
-	if (SendMails(true)) return true;
 	if (SendGifts(true)) return true;
 	return false;
 }
@@ -183,9 +191,15 @@ function btnClick(id) {
 		
 		if (SendGifts()) { done += " gift "; setStatus(done + " done"); }
 
-		if (SendMails()) { done += " mails"; setStatus(done + " done"); }
-
 		clear_color(id);
+	}
+
+	if (id == "Mails") {
+		if (SendMails()) {
+			done += " mails";
+			setStatus(done + " done");
+			clear_color(id);
+		}
 	}
 	
 	if (id == "GetDailyQuests") {
